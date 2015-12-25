@@ -37,9 +37,15 @@ sys.path.append('/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/python
 # Append the python/build to PYTHONPATH so that py4j could be found
 sys.path.append('/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/python/lib/py4j-0.8.2.1-src.zip')
 from pyspark import SparkContext
+from pyspark import SQLContext,Row
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from pyspark.ml.feature import HashingTF,IDF, Tokenizer
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.clustering import StreamingKMeans
+from pyspark.mllib.feature import StandardScaler
+
 
 access_token = "582342005-QGM3VSdAL1cjAPzL6jaHebOHUfdqVtwddcHJhHBS"
 access_token_secret = "keEVSlaNz5fegUq8ytMrTXq62paf41UI8KlH6aBH5DrWU"
@@ -48,17 +54,19 @@ consumer_secret = "EXVZnDVb3wLA6KhwOfp9weBSngJEUi1TJxNvRZsW9yp3IJ3bL7"
 auth = requests_oauthlib.OAuth1(consumer_key, consumer_secret,access_token, access_token_secret)
 
 BATCH_INTERVAL = 10  # How frequently to update (seconds)
-BLOCKSIZE = 500  # How many tweets per update
-
-
+clusterNum=5
 
 def data_plotting(q):
     plt.ion() # Interactive mode
     #fig = plt.figure(figsize=(30, 30))
     llon = -130
-    ulon = -60
-    llat = 20
+    ulon = 100
+    llat = -20
     ulat = 50
+    # llon = -130
+    # ulon = -60
+    # llat = 20
+    # ulat = 50
     rcParams['figure.figsize'] = (14,10)
     my_map = Basemap(projection='merc',
                 resolution = 'l', area_thresh = 1000.0,
@@ -75,7 +83,7 @@ def data_plotting(q):
     plt.show()
     a=1
     # To create a color map
-    clusterNum=3
+
     colors = plt.get_cmap('jet')(np.linspace(0.0, 1.0, clusterNum))
 
     while True:
@@ -188,6 +196,27 @@ def get_json(myjson):
     return False
   return json_object
 
+from pyspark.mllib.feature import Word2Vec
+from pyspark.mllib.feature import Word2VecModel
+
+
+
+def doc2vec(document):
+    doc_vec = np.zeros(100)
+    tot_words = 0
+
+    for word in document:
+        try:
+            vec = np.array(lookup_bd.value.get(word))
+            if vec!= None:
+                doc_vec +=  vec
+                tot_words += 1
+        except:
+            continue
+
+    #return(tot_words)
+    return doc_vec / float(tot_words)
+
 def tokenize(text):
     tokens = []
     text = text.encode('ascii', 'ignore') #to decode
@@ -201,21 +230,21 @@ def tokenize(text):
                 tokens.append(word)
     return tokens
 
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.clustering import StreamingKMeans
-from pyspark.mllib.feature import StandardScaler
+
 if __name__ == '__main__':
     q = multiprocessing.Queue()
     job_for_another_core2 = multiprocessing.Process(target=data_plotting,args=(q,))
     job_for_another_core2.start()
     # Set up spark objects and run
     sc  = SparkContext('local[4]', 'Social Panic Analysis')
-    # Create a local StreamingContext with two working thread and batch interval of 1 second
-    # x=[1,2,3]
-    # yrdd=sc.parallelize(x)
-    ssc = StreamingContext(sc, 20)
+    sqlContext=SQLContext(sc)
+    lookup = sqlContext.read.parquet("word2vecModel/data").alias("lookup")
+    lookup.printSchema()
+    lookup_bd = sc.broadcast(lookup.rdd.collectAsMap())
+
+    ssc = StreamingContext(sc, BATCH_INTERVAL)
     #ssc.checkpoint("checkpoint")
+
     # Create a DStream that will connect to hostname:port, like localhost:9999
     dstream = ssc.socketTextStream("localhost", 9999)
     #dstream_tweets.count().pprint()
@@ -223,61 +252,35 @@ if __name__ == '__main__':
     dstream_tweets=dstream.map(lambda post: get_json(post))\
          .filter(lambda post: post != False)\
         .filter(lambda post: 'created_at' in post)\
-         .map(lambda post: [get_coord2(post)[0],get_coord2(post)[1]])\
+         .map(lambda post: (get_coord2(post)[0],get_coord2(post)[1],post["text"]))\
          .filter(lambda post: post[0] != 0)
 
-    #dstream_tweets=dstream.map(lambda line: decompose(line))
-        #.map(lambda line: ast.literal_eval(line))
 
-    #dstream_tweets.pprint()
-    trainingData=dstream_tweets
-    #trainingData.pprint()
-    model = StreamingKMeans(k=3, decayFactor=0.1).setRandomCenters(2, 1.0, 3)
-    model.trainOn(trainingData)
-    testdata=dstream_tweets.map(lambda x: ([x[0],x[1]],[x[0],x[1]]))
-        #.map(parse)
+    dstream_text=dstream_tweets.map(lambda post: ([post[0],post[1]],post[2]))\
+         .filter(lambda tpl: tpl[1] != '')\
+         .map(lambda tpl: (tpl[0],tokenize(tpl[1])))\
+         .map(lambda tpl:(tpl[0],doc2vec(tpl[1])))
+    #dstream_text.pprint()
+
+
+    # dstream_text=dstream_tweets.map(lambda post: ([get_coord2(post)[0],get_coord2(post)[1]],post[2]))\
+    #     .filter(lambda tpl: tpl[1] != '')\
+    #     .map(lambda tpl: (tpl[0],tokenize(tpl[1])))\
+    #     .map(lambda tpl:(tpl[0],doc2vec(tpl[1])))
+    # dstream_text.pprint()
+    import itertools
+    #
+    trainingData=dstream_text.map(lambda tpl: tpl[0]+tpl[1].tolist())
+    trainingData.pprint()
+    testdata=dstream_text.map(lambda tpl: (tpl[0],tpl[0]+tpl[1].tolist()))
     #testdata.pprint()
+    #
+    model = StreamingKMeans(k=clusterNum, decayFactor=0.1).setRandomCenters(102, 1.0, 3)
+    model.trainOn(trainingData)
     clust=model.predictOnValues(testdata)
-    #testdata.join(clust).pprint()
-    #clust.pprint()
-    #print(model.predictOnValues(yrdd))
-
-    # Analysis
-
+    #
+    #
     clust.foreachRDD(lambda time, rdd: q.put(rdd.collect()))
-    #print (clust.count())
-
-
-    def updateFunc(new_values, last_sum):
-        return sum(new_values) + (last_sum or 0)
-
-    # To count distinct users
-    # dstream_userid_count=dstream_tweets.map(lambda post_array: post_array[3]['id'])\
-    #     .map(lambda userid: (str(userid),1))\
-    #     .updateStateByKey(updateFunc)
-    #dstream_userid_count.pprint()
-
-
-    # To count distinct locations and their tweets
-    # dstream_location_count=dstream_tweets.map(get_location)\
-    #     .map(lambda loc: (loc,1))\
-    #     .updateStateByKey(updateFunc)
-
-
-    # dstream_userid=dstream_tweets.map(lambda post_array: post_array[3]['id'])\
-    #     .map(lambda userid: (str(userid),1))
-
-    # Reduce last 30 seconds of data, every 10 seconds
-    # wintweetcount = dstream_tweets.countByWindow(20, 10)
-    # wintweetcount.pprint()
-
-    #dstream_location_count.pprint(30)
-    #dstream_location_count.filter(lambda t:t[0]==None).pprint()
-    #dstream_location_count.foreachRDD(lambda time, rdd: print (rdd.collect()))
-    #dstream_coord.pprint()
-    # Convert to something usable....
-
-    #dstream_coord.foreachRDD(lambda time, rdd: print (str(time)+ '-' +str(rdd.count())))
 
     # Run!
     ssc.start()
