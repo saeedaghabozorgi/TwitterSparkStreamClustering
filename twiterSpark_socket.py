@@ -19,9 +19,7 @@ import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
 import multiprocessing
-# import nltk
-# from nltk.tokenize import word_tokenize
-# from nltk.corpus import stopwords
+
 # Path for spark source folder
 os.environ['SPARK_HOME']="/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/"
 # Append the python dir to PYTHONPATH so that pyspark could be found
@@ -37,12 +35,13 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.clustering import StreamingKMeans
 from pyspark.mllib.feature import StandardScaler
+from pyspark.mllib.feature import Word2Vec
+from pyspark.mllib.feature import Word2VecModel
 
-
-access_token = "582342005-QGM3VSdAL1cjAPzL6jaHebOHUfdqVtwddcHJhHBS"
-access_token_secret = "keEVSlaNz5fegUq8ytMrTXq62paf41UI8KlH6aBH5DrWU"
-consumer_key = "PjlYiBasD06wnMOH54cxwWnDO"
-consumer_secret =
+access_token = ""
+access_token_secret = ""
+consumer_key = ""
+consumer_secret =""
 auth = requests_oauthlib.OAuth1(consumer_key, consumer_secret,access_token, access_token_secret)
 
 BATCH_INTERVAL = 10  # How frequently to update (seconds)
@@ -50,15 +49,10 @@ clusterNum=15
 
 def data_plotting(q):
     plt.ion() # Interactive mode
-    #fig = plt.figure(figsize=(30, 30))
     llon = -130
     ulon = 100
     llat = -30
     ulat = 60
-    # llon = -130
-    # ulon = -60
-    # llat = 20
-    # ulat = 50
     rcParams['figure.figsize'] = (14,10)
     my_map = Basemap(projection='merc',
                 resolution = 'l', area_thresh = 1000.0,
@@ -70,20 +64,14 @@ def data_plotting(q):
     my_map.drawmapboundary()
     my_map.fillcontinents(color = 'white', alpha = 0.3)
     my_map.shadedrelief()
-    # xs,ys = my_map(np.asarray(-100), np.asarray(30))
     plt.pause(0.0001)
     plt.show()
-    a=1
-    # To create a color map
+
 
     colors = plt.get_cmap('jet')(np.linspace(0.0, 1.0, clusterNum))
 
     while True:
         if q.empty():
-            #xs,ys = my_map(np.asarray(-100), np.asarray(30))
-            #a=(-1.0)*a
-            #my_map.plot(xs, ys,  marker='o', markersize= 20+a*10, alpha = 0.75)
-            #plt.draw()
             time.sleep(5)
 
         else:
@@ -91,15 +79,10 @@ def data_plotting(q):
             d=[x[0][0] for x in obj]
             c=[x[1] for x in obj]
             data = np.array(d)
-            #print (data)
             pcolor=np.array(c)
             print(c)
             try:
-
-                #ax.scatter(data[:, 0], data[:, 1], transform=ccrs.PlateCarree())
                 xs,ys = my_map(data[:, 0], data[:, 1])
-                #print (xs)
-                #print (ys)
                 my_map.scatter(xs, ys,  marker='o', alpha = 0.5,color=colors[pcolor])
                 plt.pause(0.0001)
                 plt.draw()
@@ -124,63 +107,7 @@ def get_coord2(post):
         coord=(0,0)
     return coord
 
-def get_coord(line):
-    """
-    Converts each object into /just/ the associated coordinates
 
-    :param line: list
-        List from dataset
-    """
-    coord = tuple()
-    try:
-        if line[1] == None:
-            coord = line[2]['bounding_box']['coordinates']
-            coord = reduce(lambda agg, nxt: [agg[0] + nxt[0], agg[1] + nxt[1]], coord[0])
-            coord = tuple(map(lambda t: t / 4.0, coord))
-        else:
-            coord = tuple(line[1]['coordinates'])
-    except TypeError:
-        print ('error get_coord')
-        coord=(0,0)
-    return coord
-
-
-def get_location(post_array):
-    try:
-        if post_array[3] == None:
-            location=None
-        else:
-            location = post_array[3]['location']
-    except TypeError:
-        print ('error get_location')
-        location=None
-    return location
-
-def decompose(line):
-    try:
-        post= json.loads(line.decode('utf-8'))
-        contents = [post['text'], post['coordinates'], post['place'],post['user']]
-        return contents
-    except:
-        #e = sys.exc_info()[0]
-        return(None)
-
-def test():
-    x=0;
-    while True:
-        x=x+1
-        time.sleep(3)
-        print(x)
-
-def parse(lp):
-    label = float(lp[lp.find('(') + 1: lp.find(',')])
-    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
-    return LabeledPoint(label, vec)
-
-# def parse2(lp):
-#     label = float(1)
-#     vec = Vectors.dense(lp[])
-#     return LabeledPoint(label, vec)
 
 def get_json(myjson):
   try:
@@ -188,10 +115,6 @@ def get_json(myjson):
   except ValueError, e:
     return False
   return json_object
-
-from pyspark.mllib.feature import Word2Vec
-from pyspark.mllib.feature import Word2VecModel
-
 
 
 def doc2vec(document):
