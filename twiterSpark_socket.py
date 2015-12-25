@@ -1,12 +1,4 @@
-#!/usr/bin/env python2.7
-#http://will-farmer.com/twitter-civil-unrest-analysis-with-apache-spark.html
-"""
-Twitter Panic!
 
-Real time monitoring of civil disturbance through the Twitter API
-
-NOTE, ONLY PYTHON 2.7 IS SUPPORTED
-"""
 from __future__ import print_function
 import os
 import sys
@@ -50,19 +42,19 @@ from pyspark.mllib.feature import StandardScaler
 access_token = "582342005-QGM3VSdAL1cjAPzL6jaHebOHUfdqVtwddcHJhHBS"
 access_token_secret = "keEVSlaNz5fegUq8ytMrTXq62paf41UI8KlH6aBH5DrWU"
 consumer_key = "PjlYiBasD06wnMOH54cxwWnDO"
-consumer_secret = "EXVZnDVb3wLA6KhwOfp9weBSngJEUi1TJxNvRZsW9yp3IJ3bL7"
+consumer_secret =
 auth = requests_oauthlib.OAuth1(consumer_key, consumer_secret,access_token, access_token_secret)
 
 BATCH_INTERVAL = 10  # How frequently to update (seconds)
-clusterNum=5
+clusterNum=15
 
 def data_plotting(q):
     plt.ion() # Interactive mode
     #fig = plt.figure(figsize=(30, 30))
     llon = -130
     ulon = 100
-    llat = -20
-    ulat = 50
+    llat = -30
+    ulat = 60
     # llon = -130
     # ulon = -60
     # llat = 20
@@ -96,9 +88,10 @@ def data_plotting(q):
 
         else:
             obj=q.get()
-            d=[x[0] for x in obj]
+            d=[x[0][0] for x in obj]
             c=[x[1] for x in obj]
             data = np.array(d)
+            #print (data)
             pcolor=np.array(c)
             print(c)
             try:
@@ -251,35 +244,27 @@ if __name__ == '__main__':
     #
     dstream_tweets=dstream.map(lambda post: get_json(post))\
          .filter(lambda post: post != False)\
-        .filter(lambda post: 'created_at' in post)\
+         .filter(lambda post: 'created_at' in post)\
          .map(lambda post: (get_coord2(post)[0],get_coord2(post)[1],post["text"]))\
-         .filter(lambda post: post[0] != 0)
+         .filter(lambda tpl: tpl[0] != 0)\
+         .filter(lambda tpl: tpl[2] != '')\
+         .map(lambda tpl: (tpl[0],tpl[1],tokenize(tpl[2])))\
+         .map(lambda tpl:(tpl[0],tpl[1],tpl[2],doc2vec(tpl[2])))
+    #dstream_tweets.pprint()
 
 
-    dstream_text=dstream_tweets.map(lambda post: ([post[0],post[1]],post[2]))\
-         .filter(lambda tpl: tpl[1] != '')\
-         .map(lambda tpl: (tpl[0],tokenize(tpl[1])))\
-         .map(lambda tpl:(tpl[0],doc2vec(tpl[1])))
-    #dstream_text.pprint()
 
-
-    # dstream_text=dstream_tweets.map(lambda post: ([get_coord2(post)[0],get_coord2(post)[1]],post[2]))\
-    #     .filter(lambda tpl: tpl[1] != '')\
-    #     .map(lambda tpl: (tpl[0],tokenize(tpl[1])))\
-    #     .map(lambda tpl:(tpl[0],doc2vec(tpl[1])))
-    # dstream_text.pprint()
-    import itertools
-    #
-    trainingData=dstream_text.map(lambda tpl: tpl[0]+tpl[1].tolist())
-    trainingData.pprint()
-    testdata=dstream_text.map(lambda tpl: (tpl[0],tpl[0]+tpl[1].tolist()))
+    trainingData=dstream_tweets.map(lambda tpl: [tpl[0],tpl[1]]+tpl[3].tolist())
+    #trainingData.pprint()
+    testdata=dstream_tweets.map(lambda tpl: (([tpl[0],tpl[1]],tpl[2]),[tpl[0],tpl[1]]+tpl[3].tolist()))
     #testdata.pprint()
     #
-    model = StreamingKMeans(k=clusterNum, decayFactor=0.1).setRandomCenters(102, 1.0, 3)
+    model = StreamingKMeans(k=clusterNum, decayFactor=0.6).setRandomCenters(102, 1.0, 3)
     model.trainOn(trainingData)
     clust=model.predictOnValues(testdata)
     #
-    #
+    clust.pprint()
+
     clust.foreachRDD(lambda time, rdd: q.put(rdd.collect()))
 
     # Run!

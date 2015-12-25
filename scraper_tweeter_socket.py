@@ -39,8 +39,8 @@ print 'Socket now listening'
 def clientthread(conn):
     url='https://stream.twitter.com/1.1/statuses/filter.json'
     #
-    data      = [('language', 'en'), ('locations', '-130,-20,100,50')]
-    #,('track','ibm,google,microsoft')
+    data      = [('language', 'en'), ('locations', '-130,-20,100,50'),('track','christmas')]
+
     query_url = url + '?' + '&'.join([str(t[0]) + '=' + str(t[1]) for t in data])
     response  = requests.get(query_url, auth=auth, stream=True)
     print(query_url, response) # 200 <OK>
