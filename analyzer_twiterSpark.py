@@ -21,11 +21,11 @@ import numpy as np
 import multiprocessing
 
 # Path for spark source folder
-os.environ['SPARK_HOME']="/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/"
+os.environ['SPARK_HOME']="/usr/local/Cellar/apache-spark/1.5.2/"
 # Append the python dir to PYTHONPATH so that pyspark could be found
-sys.path.append('/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/python/')
+sys.path.append('/usr/local/Cellar/apache-spark/1.5.2/python/')
 # Append the python/build to PYTHONPATH so that py4j could be found
-sys.path.append('/usr/local/Cellar/apache-spark/spark-1.5.2-bin-hadoop2.6/python/lib/py4j-0.8.2.1-src.zip')
+sys.path.append('/usr/local/Cellar/apache-spark/1.5.2/python/lib/py4j-0.8.2.1-src.zip')
 from pyspark import SparkContext
 from pyspark import SQLContext,Row
 from pyspark.streaming import StreamingContext
@@ -152,7 +152,9 @@ if __name__ == '__main__':
     job_for_another_core2 = multiprocessing.Process(target=data_plotting,args=(q,))
     job_for_another_core2.start()
     # Set up spark objects and run
-    sc  = SparkContext('local[4]', 'Social Panic Analysis')
+    #sc  = SparkContext('local[*]', 'Social Panic Analysis')
+    sc  = SparkContext('spark://Saeeds-MBP-IBM:7077', 'Twitter Analysis')
+
     sqlContext=SQLContext(sc)
     lookup = sqlContext.read.parquet("word2vecModel/data").alias("lookup")
     lookup.printSchema()
