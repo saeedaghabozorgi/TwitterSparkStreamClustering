@@ -47,6 +47,8 @@ auth = requests_oauthlib.OAuth1(consumer_key, consumer_secret,access_token, acce
 BATCH_INTERVAL = 10  # How frequently to update (seconds)
 clusterNum=15
 
+
+
 def data_plotting(q):
     plt.ion() # Interactive mode
     llon = -130
@@ -133,19 +135,29 @@ def doc2vec(document):
     #return(tot_words)
     return doc_vec / float(tot_words)
 
+remove_spl_char_regex = re.compile('[%s]' % re.escape(string.punctuation)) # regex to remove special characters
+stopwords=[u'i', u'me', u'my', u'myself', u'we', u'our', u'ours', u'ourselves', u'you', u'your', u'yours', u'yourself', u'yourselves', u'he', u'him', u'his', u'himself', u'she', u'her', u'hers', u'herself', u'it', u'its', u'itself', u'they', u'them', u'their', u'theirs', u'themselves', u'what', u'which', u'who', u'whom', u'this', u'that', u'these', u'those', u'am', u'is', u'are', u'was', u'were', u'be', u'been', u'being', u'have', u'has', u'had', u'having', u'do', u'does', u'did', u'doing', u'a', u'an', u'the', u'and', u'but', u'if', u'or', u'because', u'as', u'until', u'while', u'of', u'at', u'by', u'for', u'with', u'about', u'against', u'between', u'into', u'through', u'during', u'before', u'after', u'above', u'below', u'to', u'from', u'up', u'down', u'in', u'out', u'on', u'off', u'over', u'under', u'again', u'further', u'then', u'once', u'here', u'there', u'when', u'where', u'why', u'how', u'all', u'any', u'both', u'each', u'few', u'more', u'most', u'other', u'some', u'such', u'no', u'nor', u'not', u'only', u'own', u'same', u'so', u'than', u'too', u'very', u's', u't', u'can', u'will', u'just', u'don', u'should', u'now']
 def tokenize(text):
     tokens = []
     text = text.encode('ascii', 'ignore') #to decode
     text=re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text) # to replace url with ''
+    text = remove_spl_char_regex.sub(" ",text)  # Remove special characters
     text=text.lower()
+
+
     for word in text.split():
-        if word \
-            not in string.punctuation \
+        if word not in stopwords \
+            and word not in string.punctuation \
             and len(word)>1 \
             and word != '``':
                 tokens.append(word)
     return tokens
 
+from collections import Counter
+def freqcount(terms_all):
+    count_all = Counter()
+    count_all.update(terms_all)
+    return count_all.most_common(5)
 
 if __name__ == '__main__':
     q = multiprocessing.Queue()
@@ -153,7 +165,7 @@ if __name__ == '__main__':
     job_for_another_core2.start()
     # Set up spark objects and run
     #sc  = SparkContext('local[*]', 'Social Panic Analysis')
-    sc  = SparkContext('spark://Saeeds-MBP-IBM:7077', 'Twitter Analysis')
+    sc  = SparkContext('local[*]', 'Twitter Analysis')
 
     sqlContext=SQLContext(sc)
     lookup = sqlContext.read.parquet("word2vecModel/data").alias("lookup")
@@ -187,8 +199,13 @@ if __name__ == '__main__':
     model = StreamingKMeans(k=clusterNum, decayFactor=0.6).setRandomCenters(102, 1.0, 3)
     model.trainOn(trainingData)
     clust=model.predictOnValues(testdata)
-    #
-    clust.pprint()
+    #clust.pprint()
+    #words = lines.flatMap(lambda line: line.split(" "))
+    topic=clust.map(lambda x: (x[1],x[0][1]))
+    #topic.pprint()
+    topicAgg = topic.reduceByKey(lambda x,y: x+y)
+    #wordCollect.pprint()
+    topicAgg.map(lambda x: (x[0],freqcount(x[1]))).pprint()
 
     clust.foreachRDD(lambda time, rdd: q.put(rdd.collect()))
 
