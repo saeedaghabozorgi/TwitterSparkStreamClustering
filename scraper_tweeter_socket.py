@@ -9,10 +9,10 @@ import json
 import oauth2 as oauth
 from datetime import datetime
 #Variables that contains the user credentials to access Twitter API
-access_token = "582342005-QGM3VSdAL1cjAPzL6jaHebOHUfdqVtwddcHJhHBS"
-access_token_secret = "keEVSlaNz5fegUq8ytMrTXq62paf41UI8KlH6aBH5DrWU"
-consumer_key = "PjlYiBasD06wnMOH54cxwWnDO"
-consumer_secret = "EXVZnDVb3wLA6KhwOfp9weBSngJEUi1TJxNvRZsW9yp3IJ3bL7"
+access_token = "582342005-QGM3VSdAL1cjAPzL6jaHebOHUfdqVtwddcHJhHB"
+access_token_secret = "keEVSlaNz5fegUq8ytMrTXq62paf41UI8KlH6aBH5DrU"
+consumer_key = "PjlYiBasD06wnMOH54cxwWDO"
+consumer_secret = "EXVZnDVb3wLA6KhwOfp9weBSngJEUi1TJxNvRZsW9yp3IJbL7"
 auth = requests_oauthlib.OAuth1(consumer_key, consumer_secret,access_token, access_token_secret)
 
 
